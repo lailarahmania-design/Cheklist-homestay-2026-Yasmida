@@ -60,3 +60,19 @@
 - Timer dihitung dari `started_at` dan total jeda di server; klien hanya menampilkan.
 - Link/QR sesi hanya memuat **kode sesi**, tanpa kunci jawaban atau data rahasia.
 - Setiap kelompok terikat ke `auth.uid()` siswa anonim; RLS membatasi akses ke data kelompok sendiri.
+
+## Tahap 2: dunia game
+
+- **Peta** (`game/systems/world-map.js`): satu pulau isometrik 58×30 tile (tile 64×32). Wilayah berurutan
+  sepanjang jalur batu keemasan: Hutan → Sungai + Jembatan Wahyu → Lembah Kaum Tsamud (ngarai dengan golem)
+  → Taman Cahaya (pohon cahaya, air mancur, prasasti). Dekorasi memakai benih acak tetap, sehingga peta selalu
+  sama di semua perangkat. Ini penting untuk sinkronisasi posisi di Tahap 4.
+- **Kunci wilayah**: jembatan tidak bisa dilalui sampai Pos 1 selesai; golem menutup ngarai sampai Pos 2 selesai.
+  Konektivitas ini diuji otomatis (`tests/unit/world-map.test.js`).
+- **Karakter** (`character-rig.js`): tekstur SVG tampak depan/belakang + animasi prosedural
+  idle, walk, run, jump, interact, victory, defeat (squash & stretch, partikel debu/bintang).
+- **Lumi** (`lumi.js`): mengikuti karakter dengan jeda halus, bercahaya, berekspresi senang/sedih.
+- **Kamera** (`camera.js`): follow dengan lerp 0.08, zoom bertambah otomatis di area misi, mode peta penuh.
+- **Input** (`input.js`): keyboard + joystick sentuh HTML.
+- Phaser dimuat terpisah (`import()`) hanya saat bermain, sehingga halaman guru tetap ringan.
+- Tanah dirender sekali ke RenderTexture dengan `batchDraw` (waktu muat ±1 detik).

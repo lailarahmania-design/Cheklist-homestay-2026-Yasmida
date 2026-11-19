@@ -137,12 +137,55 @@ function girlB() {
   ${safariHat(10, '#d6b87e')}${face({ y: 1 })}`;
 }
 
-const DRAW = { 'kid-boy-a': boyA, 'kid-girl-a': girlA, 'kid-boy-b': boyB, 'kid-girl-b': girlB };
+// ---------- tampak belakang (dipakai saat karakter berjalan menjauhi kamera) ----------
+function backBase(shirt = P.khaki) {
+  return `
+  <ellipse cx="60" cy="152" rx="30" ry="6" fill="#000" opacity=".15"/>
+  <rect x="44" y="124" width="13" height="18" rx="4" fill="${P.khakiDark}"/>
+  <rect x="63" y="124" width="13" height="18" rx="4" fill="${P.khakiDark}"/>
+  <path d="M41 138h18v8a4 4 0 0 1-4 4H43a4 4 0 0 1-4-4z" fill="${P.boot}"/>
+  <path d="M61 138h18v8a4 4 0 0 1-4 4H63a4 4 0 0 1-4-4z" fill="${P.boot}"/>
+  <path d="M40 96q0-8 8-8h24q8 0 8 8v30H40z" fill="${shirt}"/>
+  <rect x="30" y="94" width="11" height="24" rx="5.5" fill="${shirt}"/>
+  <rect x="79" y="94" width="11" height="24" rx="5.5" fill="${shirt}"/>
+  <circle cx="35.5" cy="119" r="5" fill="${P.skin}"/><circle cx="84.5" cy="119" r="5" fill="${P.skin}"/>
+  <!-- tas punggung besar -->
+  <rect x="36" y="88" width="48" height="40" rx="10" fill="${P.brown}"/>
+  <path d="M36 98q24-12 48 0v-2q0-8-10-8H46q-10 0-10 8z" fill="${P.brownDark}"/>
+  <rect x="44" y="106" width="32" height="16" rx="5" fill="${P.brownDark}" opacity=".55"/>
+  <rect x="57" y="96" width="6" height="7" rx="1" fill="${P.gold}"/>
+  <rect x="58" y="128" width="4" height="4" fill="${P.brownDark}"/>`;
+}
+const backHead = `<ellipse cx="60" cy="62" rx="32" ry="30" fill="${P.skin}"/>`;
 
-/** @returns {string} markup SVG karakter */
-export function characterSVG(id, { size = 96, title = '' } = {}) {
-  const draw = DRAW[id] || boyA;
-  return `<svg class="chibi" viewBox="0 0 120 160" width="${size}" height="${Math.round(size * 1.333)}" role="img" aria-label="${title}">${title ? `<title>${title}</title>` : ''}${draw()}</svg>`;
+function boyABack() {
+  return `${backBase()}${backHead}
+  <ellipse cx="60" cy="66" rx="31" ry="26" fill="${P.hair}"/>
+  <path d="M26 58q0-34 34-34t34 34q0 6-4 10H30q-4-4-4-10z" fill="${P.brown}"/>
+  <rect x="27" y="46" width="66" height="6" rx="3" fill="${P.brownDark}"/>`;
+}
+function girlABack() {
+  return `${backBase()}<path d="M24 66q-4-44 36-44t36 44q2 22-10 34q-26 10-52 0q-12-12-10-34z" fill="${P.olive}"/>
+  <path d="M34 98q26 12 52 0l-2 8q-24 10-48 0z" fill="${P.oliveDark}"/>
+  <path d="M40 40q20-10 40 0" fill="none" stroke="${P.oliveDark}" stroke-width="2" opacity=".5"/>`;
+}
+function boyBBack() {
+  return `${backBase()}${backHead}<ellipse cx="60" cy="66" rx="31" ry="26" fill="${P.hair}"/>${safariHat(22)}`;
+}
+function girlBBack() {
+  return `${backBase(P.cream)}<path d="M24 66q-4-44 36-44t36 44q2 22-10 34q-26 10-52 0q-12-12-10-34z" fill="${P.cream}"/>
+  <path d="M34 98q26 12 52 0l-2 8q-24 10-48 0z" fill="${P.creamDark}"/>${safariHat(10, '#d6b87e')}`;
+}
+
+const DRAW = { 'kid-boy-a': boyA, 'kid-girl-a': girlA, 'kid-boy-b': boyB, 'kid-girl-b': girlB };
+const DRAW_BACK = { 'kid-boy-a': boyABack, 'kid-girl-a': girlABack, 'kid-boy-b': boyBBack, 'kid-girl-b': girlBBack };
+
+/** @returns {string} markup SVG karakter. view: 'front' | 'back' */
+export function characterSVG(id, { size = 96, title = '', view = 'front', shadow = true } = {}) {
+  const draw = (view === 'back' ? DRAW_BACK : DRAW)[id] || boyA;
+  let art = draw();
+  if (!shadow) art = art.replace('<ellipse cx="60" cy="152" rx="30" ry="6" fill="#000" opacity=".15"/>', '');
+  return `<svg class="chibi" viewBox="0 0 120 160" width="${size}" height="${Math.round(size * 1.333)}" role="img" aria-label="${title}">${title ? `<title>${title}</title>` : ''}${art}</svg>`;
 }
 
 /** Lumi, kunang-kunang pendamping: tubuh mungil, sayap transparan, cahaya emas, mata besar. */

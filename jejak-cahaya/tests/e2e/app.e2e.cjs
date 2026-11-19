@@ -1,4 +1,4 @@
-// Uji E2E Tahap 1 — menjalankan seluruh alur guru di Chromium sungguhan.
+// Uji E2E Tahap 1 & 2 — menjalankan seluruh alur guru di Chromium sungguhan.
 // Jalankan: npm run build && npm run test:e2e
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -279,6 +279,145 @@ function assert(cond, msg) {
         }
       }
       void editUrl;
+    });
+
+    console.log('Tahap 2 — E2E');
+    const sc = (fn, arg) => page.evaluate(fn, arg);
+    const grid = () => sc(() => { const s = window.__jc.scene; const a = s.player.x / 32, b = s.player.y / 16; return { gx: (a + b) / 2, gy: (b - a) / 2 }; });
+    const teleport = (gx, gy) => sc(([gx, gy]) => window.__jc.scene.player.setPosition((gx - gy) * 32, (gx + gy) * 16), [gx, gy]);
+    const closeDialogs = async () => {
+      for (let i = 0; i < 6 && (await page.isVisible(tid('lumi-dialog'))); i++) await page.click(`${tid('dialog-btn')} >> nth=-1`);
+    };
+
+    await step('Uji Coba Main: pilih kelompok & karakter', async () => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(BASE + '#/guru');
+      await page.click('[data-act="edit"] >> nth=0');
+      await page.click(tid('test-play'));
+      await page.waitForSelector(tid('start-adventure'));
+      assert((await page.$$(tid('pick-char'))).length === 4, '4 karakter');
+      await page.click(`${tid('pick-group')} >> nth=1`);
+      await page.click(`${tid('pick-char')} >> nth=3`);
+      assert((await page.getAttribute(`${tid('pick-char')} >> nth=3`, 'aria-checked')) === 'true', 'karakter terpilih');
+    });
+
+    await step('Dunia dimuat < 15 detik, Lumi menyambut (3 dialog)', async () => {
+      const t0 = Date.now();
+      await page.click(tid('start-adventure'));
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`, { timeout: 15000 });
+      console.log(`     (dimuat dalam ${((Date.now() - t0) / 1000).toFixed(1)} dtk)`);
+      assert((await page.textContent(tid('lumi-dialog'))).includes('Lumi'), 'dialog Lumi');
+      assert(await sc(() => window.__jc.scene.player.characterId === 'kid-girl-b'), 'karakter sesuai pilihan');
+      for (let i = 0; i < 3; i++) await page.click(tid('dialog-btn'));
+      assert(!(await page.isVisible(tid('lumi-dialog'))), 'dialog tertutup');
+      await page.screenshot({ path: path.join(OUT, 'game-start.png') });
+    });
+
+    await step('Keyboard: WASD berjalan, Shift berlari lebih cepat', async () => {
+      const a = await grid();
+      await page.keyboard.down('d');
+      await page.waitForTimeout(600);
+      await page.keyboard.up('d');
+      const b = await grid();
+      const walk = Math.hypot(b.gx - a.gx, b.gy - a.gy);
+      assert(walk > 0.5, 'bergerak: ' + walk.toFixed(2));
+      await page.keyboard.down('Shift');
+      await page.keyboard.down('a');
+      await page.waitForTimeout(600);
+      await page.keyboard.up('a');
+      await page.keyboard.up('Shift');
+      const c = await grid();
+      const run = Math.hypot(c.gx - b.gx, c.gy - b.gy);
+      assert(run > walk * 1.3, `lari (${run.toFixed(2)}) > jalan (${walk.toFixed(2)})`);
+    });
+
+    await step('Jembatan terkunci sebelum Pos 1, golem minggir setelah Pos 2', async () => {
+      const stand = (gx, gy) => sc(([gx, gy]) => window.__jc.scene.canStand((gx - gy) * 32, (gx + gy) * 16), [gx, gy]);
+      assert(!(await stand(21, 15)), 'jembatan terkunci');
+      await page.click(tid('btn-test'));
+      await page.click(tid('complete-pos1'));
+      await closeDialogs();
+      assert(await stand(21, 15), 'jembatan terbuka');
+      assert(!(await stand(40, 15)), 'golem masih menghadang');
+      await page.click(tid('complete-pos2'));
+      await closeDialogs();
+      assert(await stand(40, 15), 'golem minggir');
+      assert(!(await stand(21, 5)), 'sungai tetap tidak bisa diseberangi');
+      const track = await page.textContent('[data-quest]');
+      assert((track.match(/✅/g) || []).length === 2, 'progres 2 pos selesai');
+    });
+
+    await step('Mendekati pos memunculkan tombol E & dialog tantangan', async () => {
+      await teleport(37.6, 15);
+      await page.waitForTimeout(400);
+      assert(await sc(() => window.__jc.scene.near === 'pos2'), 'dekat pos2');
+      await page.click('[data-reset-quest]');
+      await page.keyboard.press('e');
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`);
+      assert((await page.textContent(tid('lumi-dialog'))).includes('Golem'), 'pesan golem');
+      await closeDialogs();
+      await page.waitForTimeout(1200);
+      assert(await sc(() => window.__jc.scene.region === 'desert'), 'wilayah gurun');
+      await page.screenshot({ path: path.join(OUT, 'game-pos2.png') });
+    });
+
+    await step('Animasi lompat, interaksi, menang, kalah berjalan lalu kembali idle', async () => {
+      for (const a of ['jump', 'interact', 'victory', 'defeat']) {
+        await page.click(tid(`anim-${a}`));
+        await page.waitForTimeout(150);
+        assert(await sc((a) => window.__jc.scene.player.state === a, a), 'state ' + a);
+        await page.waitForTimeout(a === 'victory' || a === 'defeat' ? 2300 : 700);
+      }
+      assert(await sc(() => window.__jc.scene.player.state === 'idle'), 'kembali idle');
+    });
+
+    await step('Peta penuh memperkecil kamera lalu kembali mengikuti', async () => {
+      const z0 = await sc(() => window.__jc.scene.cameras.main.zoom);
+      await page.click(tid('btn-map'));
+      await page.waitForTimeout(2000);
+      const z1 = await sc(() => window.__jc.scene.cameras.main.zoom);
+      assert(z1 < z0 * 0.7, `zoom ${z0.toFixed(2)} → ${z1.toFixed(2)}`);
+      await page.screenshot({ path: path.join(OUT, 'game-map.png') });
+      await page.keyboard.press('m');
+      await page.waitForTimeout(1800);
+      assert(await sc(() => !!window.__jc.scene.cameras.main._follow), 'mengikuti lagi');
+    });
+
+    await step('Keluar menghentikan game & kembali ke editor', async () => {
+      await page.click(tid('btn-exit'));
+      await page.waitForSelector(tid('save'));
+      assert(!(await page.$('canvas')), 'canvas dihapus');
+    });
+
+    await step('HP: joystick sentuh menggerakkan karakter, tanpa scroll horizontal', async () => {
+      const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+      const m = await mctx.newPage();
+      m.setDefaultTimeout(10000);
+      m.on('pageerror', (e) => errors.push(e.message));
+      const data = await page.evaluate(() => localStorage.getItem('jejak-cahaya:templates:v1'));
+      await m.goto(BASE);
+      await m.evaluate((d) => localStorage.setItem('jejak-cahaya:templates:v1', d), data);
+      const id = JSON.parse(data)[0].id;
+      await m.goto(BASE + '#/uji/' + id);
+      await m.click(tid('start-adventure'));
+      await m.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`, { timeout: 15000 });
+      for (let i = 0; i < 3; i++) await m.click(tid('dialog-btn'));
+      const g = () => m.evaluate(() => { const s = window.__jc.scene; return { x: s.player.x, y: s.player.y }; });
+      const a = await g();
+      const box = await m.locator('[data-joy]').boundingBox();
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      const cdp = await mctx.newCDPSession(m);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx, y: cy }] });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx + 40, y: cy }] });
+      await m.waitForTimeout(700);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      const b = await g();
+      assert(b.x - a.x > 20, `joystick menggerakkan (${(b.x - a.x).toFixed(0)}px)`);
+      const over = await m.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      assert(over <= 0, 'melebar ' + over);
+      await m.screenshot({ path: path.join(OUT, 'hp-game.png') });
+      await mctx.close();
     });
 
     await step('Tidak ada error JavaScript selama pengujian', async () => {

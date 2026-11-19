@@ -49,6 +49,7 @@ export async function renderEditor(root, { id, tab }) {
     </div>
     <div class="actions">
       <button class="btn btn-ghost btn-sm" data-act="export">⬇️ Ekspor JSON</button>
+      <button class="btn btn-gold btn-sm" data-act="play" data-testid="test-play">▶ Uji Coba Main</button>
       <button class="btn btn-primary" data-act="save" data-testid="save">💾 Simpan</button>
     </div>
   </div>
@@ -119,6 +120,11 @@ export async function renderEditor(root, { id, tab }) {
   }
 
   main.querySelector('[data-act="save"]').onclick = save;
+  main.querySelector('[data-act="play"]').onclick = async () => {
+    // Uji coba memakai versi tersimpan, jadi simpan dulu bila ada perubahan.
+    if (state.dirty && !(await save())) return;
+    navigate(`/uji/${id}`);
+  };
   main.querySelector('[data-act="export"]').onclick = () => {
     downloadJSON(`jejak-cahaya-${slug(state.draft.identity.title)}.json`, exportConfig(state.draft));
     toast('Ekspor berisi draf saat ini (termasuk kunci jawaban).');

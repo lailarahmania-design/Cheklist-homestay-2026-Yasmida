@@ -16,13 +16,27 @@ Aplikasi **tidak terikat pada satu materi**. Semua soal berasal dari bank soal y
 | Tahap | Isi | Status |
 |---|---|---|
 | 1 | Fondasi: beranda, dashboard guru, konfigurasi ujian, kelompok, bank soal manual & JSON | ✅ Selesai |
-| 2 | Phaser, pilih karakter, animasi, kamera isometrik, peta 3 wilayah | ⏳ |
+| 2 | Phaser, pilih karakter, animasi, kamera isometrik, peta 3 wilayah | ✅ Selesai |
 | 3 | Puzzle ayat, Battle Quiz, refleksi, skor & progres | ⏳ |
 | 4 | Supabase: login guru, kode/QR sesi, multiplayer real-time, validasi skor di server | ⏳ |
 | 5 | Rekap, peringkat, ekspor CSV/XLSX/JSON, pengujian menyeluruh | ⏳ |
 
 > **Catatan Tahap 1:** konfigurasi masih disimpan di browser (localStorage) melalui `LocalAdapter`.
 > Di Tahap 4 penyimpanan pindah ke Supabase dengan login guru, tanpa mengubah kode tampilan.
+
+## Mencoba game (Tahap 2)
+
+Buka konfigurasi di Mode Guru → **▶ Uji Coba Main** → pilih kelompok & karakter → **Mulai Petualangan**.
+
+| Aksi | Laptop | HP / tablet |
+|---|---|---|
+| Berjalan | WASD / tombol panah | joystick kiri bawah |
+| Berlari | tahan Shift | tarik joystick penuh |
+| Lompat | Spasi | tombol ⤒ |
+| Interaksi (pos, papan) | E / Enter | tombol ✋ |
+| Peta penuh | M / tombol 🗺️ | tombol 🗺️ |
+
+Panel 🧪 (khusus uji coba guru): jelajah bebas, simulasi pos selesai, dan uji animasi.
 
 ## Menjalankan
 
@@ -52,10 +66,12 @@ jejak-cahaya/
 │  ├─ question-bank/          skema & validasi bank soal, operasi tambah/gabung/ganti
 │  ├─ teacher/                dashboard, editor, dan tab-tab konfigurasi
 │  ├─ home/                   beranda
+│  ├─ student/                halaman bermain (pilih kelompok/karakter, HUD, dialog Lumi, joystick)
+│  ├─ game/                   Phaser: scenes/, systems/ (peta, karakter, Lumi, kamera, input, misi), art/
 │  ├─ ui/                     ilustrasi karakter & Lumi (SVG), modal, toast, unduh file
 │  └─ styles/                 tema petualangan (palet hijau hutan, krem, emas, cokelat, biru air)
 ├─ tests/unit/                Vitest
-├─ tests/e2e/                 alur lengkap Mode Guru di Chromium
+├─ tests/e2e/                 alur lengkap Mode Guru & uji coba game di Chromium
 └─ docs/                      ARSITEKTUR, FORMAT-JSON, DATABASE
 ```
 
@@ -67,4 +83,6 @@ Dokumentasi lanjutan:
 ## Aset visual
 
 Karakter (4 penjelajah chibi) dan Lumi digambar sebagai SVG di `src/ui/characters.js`,
-mengikuti lembar konsep referensi. Gambar yang sama akan dipakai sebagai tekstur Phaser di Tahap 2.
+mengikuti lembar konsep referensi. Gambar yang sama dipakai sebagai tekstur Phaser (tampak depan & belakang).
+Aset lingkungan (pohon, gerbang bercahaya, golem, kuil batu, pohon cahaya, prasasti, dll.)
+ada di `src/game/art/objects.js`; tile isometrik digambar di `src/game/art/textures.js`.

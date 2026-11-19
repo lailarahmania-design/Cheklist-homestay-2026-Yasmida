@@ -9,10 +9,13 @@
     "build": "vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "test": "vitest run",
-    "test:e2e": "node tests/e2e/stage1.e2e.cjs"
+    "test:e2e": "node tests/e2e/app.e2e.cjs"
   },
   "devDependencies": {
     "vite": "7.1.12",
     "vitest": "3.2.4"
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
   }
 }
