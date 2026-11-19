@@ -1,0 +1,18 @@
+{
+  "name": "jejak-cahaya",
+  "version": "0.1.0",
+  "description": "Jejak Cahaya — The Last Journey: game petualangan edukatif untuk ujian akhir bab berkelompok",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "test": "vitest run",
+    "test:e2e": "node tests/e2e/stage1.e2e.cjs"
+  },
+  "devDependencies": {
+    "vite": "7.1.12",
+    "vitest": "3.2.4"
+  }
+}
