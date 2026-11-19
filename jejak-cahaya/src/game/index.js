@@ -35,6 +35,15 @@ export function startGame(parent, opts) {
     lumi(kind) {
       if (ready()) scene.lumi.react(kind);
     },
+    setBridgeProgress(f) {
+      if (ready()) scene.setBridgeProgress(f);
+    },
+    golemHit() {
+      if (ready()) scene.golemHit();
+    },
+    golemAttack(knockedOut) {
+      if (ready()) scene.golemAttack(knockedOut);
+    },
     toggleOverview() {
       return ready() ? scene.cameraDirector.toggleOverview() : false;
     },

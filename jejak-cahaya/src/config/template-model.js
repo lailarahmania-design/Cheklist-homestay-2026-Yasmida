@@ -20,6 +20,7 @@ export const DEFAULT_RULES = {
   completionBonus: 20, // bonus setiap menyelesaikan satu pos
   attemptsPerQuestion: 2, // kesempatan menjawab per soal (puzzle & battle)
   teamHearts: 3, // nyawa kelompok saat Battle Quiz
+  pos1QuestionCount: 0, // jumlah ayat yang dipakai di Pos 1; 0 = semua (dipilih acak per kelompok)
   pos2QuestionCount: 0, // jumlah soal yang dipakai di Battle Quiz; 0 = semua
   shuffleQuestions: true,
   shuffleOptions: true,
@@ -111,7 +112,7 @@ export function checkTemplate(t) {
     warnings.push({ tab: 'waktu', message: 'Waktu total lebih singkat dari jumlah durasi ketiga pos.' });
 
   const r = t.rules;
-  for (const k of ['correctScore', 'wrongPenalty', 'completionBonus', 'pos2QuestionCount', 'reflectionMinChars'])
+  for (const k of ['correctScore', 'wrongPenalty', 'completionBonus', 'pos1QuestionCount', 'pos2QuestionCount', 'reflectionMinChars'])
     if (!num(r[k]) || r[k] < 0) errors.push({ tab: 'peraturan', message: 'Nilai pada Peraturan tidak boleh negatif atau kosong.' });
   if (!num(r.attemptsPerQuestion) || r.attemptsPerQuestion < 1)
     errors.push({ tab: 'peraturan', message: 'Kesempatan menjawab minimal 1.' });
@@ -121,6 +122,9 @@ export function checkTemplate(t) {
     const n = t.questionBank.pos.find((x) => x.id === p.id).questions.length;
     if (n === 0) errors.push({ tab: 'soal', message: `${p.name} (${p.id.toUpperCase()}) belum memiliki soal.` });
   }
+  const pos1 = t.questionBank.pos.find((x) => x.id === 'pos1').questions.length;
+  if (r.pos1QuestionCount > pos1 && pos1 > 0)
+    warnings.push({ tab: 'peraturan', message: `Jumlah ayat Pos 1 (${r.pos1QuestionCount}) melebihi ayat yang tersedia (${pos1}); semua ayat akan dipakai.` });
   const pos2 = t.questionBank.pos.find((x) => x.id === 'pos2').questions.length;
   if (r.pos2QuestionCount > pos2 && pos2 > 0)
     warnings.push({ tab: 'peraturan', message: `Jumlah soal Battle Quiz (${r.pos2QuestionCount}) melebihi soal yang tersedia (${pos2}); semua soal akan dipakai.` });
@@ -135,9 +139,11 @@ export function maxPossibleScore(t) {
   const r = t.rules;
   const s = (q) => (q.score ?? null) === null ? r.correctScore : q.score;
   const [p1, p2, p3] = ['pos1', 'pos2', 'pos3'].map((id) => t.questionBank.pos.find((x) => x.id === id).questions);
+  const used1 = r.pos1QuestionCount > 0 ? Math.min(r.pos1QuestionCount, p1.length) : p1.length;
+  const avg1 = p1.length ? p1.reduce((a, q) => a + s(q), 0) / p1.length : 0;
   const used2 = r.pos2QuestionCount > 0 ? Math.min(r.pos2QuestionCount, p2.length) : p2.length;
   // Untuk pos 2 dengan sebagian soal, pakai rata-rata skor soal.
   const avg2 = p2.length ? p2.reduce((a, q) => a + s(q), 0) / p2.length : 0;
   const ref = p3.filter((q) => q.grading !== 'none').reduce((a, q) => a + (q.maxScore ?? r.correctScore), 0);
-  return Math.round(p1.reduce((a, q) => a + s(q), 0) + avg2 * used2 + ref + r.completionBonus * 3);
+  return Math.round(avg1 * used1 + avg2 * used2 + ref + r.completionBonus * 3);
 }

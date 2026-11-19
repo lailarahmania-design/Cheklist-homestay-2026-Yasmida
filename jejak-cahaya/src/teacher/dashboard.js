@@ -8,12 +8,15 @@ import { exportConfig, importConfig, duplicateTemplate } from '../config/config-
 import { bankTemplate } from '../question-bank/bank-ops.js';
 import { validateBank } from '../question-bank/schema.js';
 import { teacherShell } from './shell.js';
-import { esc, toast, confirmDialog, downloadJSON, pickTextFile, slug, formatDate } from '../ui/ui.js';
+import { esc, toast, confirmDialog, downloadJSON, downloadText, pickTextFile, slug, formatDate, openModal } from '../ui/ui.js';
+import { csvFromData, resultFileName } from '../results/result-report.js';
+import { resultSheetHTML } from '../results/result-sheet.js';
 
 export async function renderDashboard(root) {
   const main = teacherShell(root, { crumbs: '<span>Dashboard</span>' });
   const adapter = getAdapter();
   const templates = await adapter.listTemplates();
+  const results = await adapter.listResults();
 
   main.innerHTML = `
   <section class="t-section">
@@ -33,12 +36,24 @@ export async function renderDashboard(root) {
     </div>
   </section>
 
+  <section class="t-section">
+    <div class="t-section-head"><div>
+      <h2>Hasil Tersimpan</h2>
+      <p class="hint">Hasil setiap kelompok disimpan otomatis di perangkat ini saat bermain. Unduh sebagai file agar aman. Rekap seluruh kelompok & peringkat tersedia di Tahap 5.</p>
+    </div></div>
+    <div class="res-list" data-testid="result-list">
+      ${results.length ? results.map(resultCard).join('') : '<div class="panel empty"><p class="hint">Belum ada hasil permainan.</p></div>'}
+    </div>
+  </section>
+
   <section class="t-section panel t-note">
     <h2>Sesi Permainan</h2>
     <p>Membuat sesi, kode/QR untuk siswa, tombol <b>Mulai · Jeda · Lanjut · Akhiri</b>, dan pemantauan kelompok secara langsung akan aktif di <b>Tahap 4</b> (multiplayer). Tampilan dashboard ini bisa ditayangkan ke proyektor dari laptop guru.</p>
   </section>`;
 
   main.addEventListener('click', async (e) => {
+    const rbtn = e.target.closest('[data-ract]');
+    if (rbtn) return resultAction(rbtn.dataset.ract, rbtn.closest('[data-rid]').dataset.rid, results);
     const btn = e.target.closest('[data-act]');
     if (!btn) return;
     const id = btn.closest('[data-id]')?.dataset.id;
@@ -137,4 +152,48 @@ function card(t) {
       <button class="btn btn-sm btn-ghost" data-act="delete" style="color:var(--danger)">🗑 Hapus</button>
     </div>
   </article>`;
+}
+
+function resultCard(r) {
+  const s = r.summary;
+  const done = r.run.finished;
+  return `
+  <article class="panel res-card" data-rid="${esc(r.id)}" data-testid="result-card">
+    <div class="res-score"><b>${s.score}</b><small>nilai</small></div>
+    <div class="res-main">
+      <h3>${esc(s.group)} ${done ? (s.title !== '-' ? '<span class="badge badge-ok">✨ Penjelajah Cahaya</span>' : '<span class="badge">Selesai</span>') : '<span class="badge badge-warn">Belum selesai</span>'}</h3>
+      <p class="hint">${esc(s.exam)} · ✔ ${s.correct} benar · ✖ ${s.wrong} salah · ⏱ ${esc(s.duration)} · ${esc(formatDate(r.savedAt))}</p>
+    </div>
+    <div class="tpl-card-actions">
+      <button class="btn btn-sm btn-primary" data-ract="view">👁 Lihat</button>
+      <button class="btn btn-sm" data-ract="csv">⬇️ CSV</button>
+      <button class="btn btn-sm" data-ract="json">⬇️ JSON</button>
+      <button class="btn btn-sm btn-ghost" data-ract="delete" style="color:var(--danger)">🗑</button>
+    </div>
+  </article>`;
+}
+
+async function resultAction(act, id, results) {
+  const r = results.find((x) => x.id === id);
+  if (!r) return;
+  if (act === 'view') {
+    openModal({
+      title: `Hasil ${r.summary.group}`,
+      wide: true,
+      render(body) {
+        body.innerHTML = `${resultSheetHTML(r)}<div class="actions no-print"><button class="btn btn-gold" data-print>🖨️ Cetak / Simpan PDF</button></div>`;
+        body.querySelector('[data-print]').onclick = () => window.print();
+      },
+    });
+  } else if (act === 'csv') {
+    downloadText(resultFileName(r.run, 'csv'), csvFromData(r), 'text/csv;charset=utf-8');
+  } else if (act === 'json') {
+    downloadJSON(resultFileName(r.run, 'json'), r);
+  } else if (act === 'delete') {
+    const ok = await confirmDialog({ title: 'Hapus hasil?', message: `Hasil "${r.summary.group}" akan dihapus dari perangkat ini. Unduh terlebih dahulu jika masih diperlukan.`, okText: 'Hapus', danger: true });
+    if (!ok) return;
+    await getAdapter().deleteResult(id);
+    toast('Hasil dihapus.');
+    refresh();
+  }
 }

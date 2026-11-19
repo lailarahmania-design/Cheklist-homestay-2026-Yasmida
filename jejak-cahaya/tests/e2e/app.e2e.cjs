@@ -1,4 +1,4 @@
-// Uji E2E Tahap 1 & 2 — menjalankan seluruh alur guru di Chromium sungguhan.
+// Uji E2E Tahap 1–3 — menjalankan seluruh alur guru di Chromium sungguhan.
 // Jalankan: npm run build && npm run test:e2e
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
@@ -351,10 +351,9 @@ function assert(cond, msg) {
       await teleport(37.6, 15);
       await page.waitForTimeout(400);
       assert(await sc(() => window.__jc.scene.near === 'pos2'), 'dekat pos2');
-      await page.click('[data-reset-quest]');
       await page.keyboard.press('e');
       await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`);
-      assert((await page.textContent(tid('lumi-dialog'))).includes('Golem'), 'pesan golem');
+      assert((await page.textContent(tid('lumi-dialog'))).includes('sudah kalian taklukkan'), 'pesan pos selesai');
       await closeDialogs();
       await page.waitForTimeout(1200);
       assert(await sc(() => window.__jc.scene.region === 'desert'), 'wilayah gurun');
@@ -385,6 +384,8 @@ function assert(cond, msg) {
 
     await step('Keluar menghentikan game & kembali ke editor', async () => {
       await page.click(tid('btn-exit'));
+      assert((await page.textContent('.modal')).includes('Hasil sementara'), 'konfirmasi simpan');
+      await page.click('[data-yes]');
       await page.waitForSelector(tid('save'));
       assert(!(await page.$('canvas')), 'canvas dihapus');
     });
@@ -418,6 +419,231 @@ function assert(cond, msg) {
       assert(over <= 0, 'melebar ' + over);
       await m.screenshot({ path: path.join(OUT, 'hp-game.png') });
       await mctx.close();
+    });
+
+    console.log('Tahap 3 — E2E');
+    // Template uji: 10 "ayat" (teks dummy Arab), 4 soal battle, 3 refleksi; Pos 1 memakai 6 ayat.
+    const verses = Array.from({ length: 10 }, (_, i) => ({ id: `v${i + 1}`, instruction: 'Susun ayat', reference: `[DUMMY] Ayat ${i + 1}`, direction: 'rtl', translation: '', score: null,
+      segments: [`أَلِف${i + 1}`, `بَاء${i + 1}`, `تَاء${i + 1}`, `ثَاء${i + 1}`] }));
+    const mcs = Array.from({ length: 4 }, (_, i) => ({ id: `m${i + 1}`, question: `[DUMMY] Soal ${i + 1}?`, options: [`Salah${i}a`, `Benar${i}`, `Salah${i}b`], answer: 1, score: null }));
+    const refl = [
+      { id: 'r1', question: '[DUMMY] Apa yang kalian pelajari?', format: 'short_text', options: [], grading: 'manual', answer: null, maxScore: 10 },
+      { id: 'r2', question: '[DUMMY] Sikap yang tepat?', format: 'choice', options: ['Sombong', 'Rendah hati'], grading: 'auto', answer: 1, maxScore: 10 },
+      { id: 'r3', question: '[DUMMY] Perasaan kalian?', format: 'choice', options: ['Senang', 'Biasa'], grading: 'none', answer: null, maxScore: null },
+    ];
+    const T3 = 'tpl_e2e_tahap3';
+    const seedTemplate = () =>
+      page.evaluate(([T3, verses, mcs, refl]) => {
+        const key = 'jejak-cahaya:templates:v1';
+        const list = JSON.parse(localStorage.getItem(key) || '[]').filter((x) => x.id !== T3);
+        const base = JSON.parse(JSON.stringify(list[0]));
+        base.id = T3;
+        base.identity.title = '[DUMMY] Ujian Tahap 3';
+        base.rules = { ...base.rules, correctScore: 10, wrongPenalty: 2, completionBonus: 20, attemptsPerQuestion: 2, teamHearts: 3, pos1QuestionCount: 6, pos2QuestionCount: 0, shuffleQuestions: true, shuffleOptions: true, reflectionRequireAll: true, reflectionMinChars: 10 };
+        base.timing = { ...base.timing, pos1Minutes: 10, pos2Minutes: 10, pos3Minutes: 10, totalMinutes: 60 };
+        base.questionBank.pos[0].questions = verses;
+        base.questionBank.pos[1].questions = mcs;
+        base.questionBank.pos[2].questions = refl;
+        list.push(base);
+        localStorage.setItem(key, JSON.stringify(list));
+      }, [T3, verses, mcs, refl]);
+    const startGameAt = async () => {
+      await page.goto(BASE + '#/guru'); // pindah dulu agar rute uji selalu dimuat ulang
+      await page.waitForSelector(tid('config-list'));
+      await page.goto(BASE + '#/uji/' + T3);
+      await page.click(tid('start-adventure'));
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`, { timeout: 15000 });
+      for (let i = 0; i < 3; i++) await page.click(tid('dialog-btn'));
+    };
+    const openPos = async (gx, gy) => {
+      await teleport(gx, gy);
+      await page.waitForTimeout(300);
+      await page.keyboard.press('e');
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`);
+      await page.click(`${tid('dialog-btn')} >> nth=0`); // Mulai tantangan
+    };
+    const boardTexts = () => page.$$eval('[data-testid="vblock"]', (els) => els.map((e) => e.textContent));
+    const currentVerse = async () => {
+      const txt = await boardTexts();
+      return verses.find((v) => v.segments.includes(txt[0]));
+    };
+    const solveBoard = async () => {
+      const v = await currentVerse();
+      for (let i = 0; i < v.segments.length; i++) {
+        const now = await boardTexts();
+        if (now[i] === v.segments[i]) continue;
+        const j = now.indexOf(v.segments[i]);
+        await page.click(`[data-testid="vblock"] >> nth=${i}`);
+        await page.click(`[data-testid="vblock"] >> nth=${j}`);
+      }
+    };
+
+    await step('Pengaturan: jumlah ayat Pos 1 dapat diatur', async () => {
+      await seedTemplate();
+      await page.goto(BASE + `#/guru/edit/${T3}/peraturan`);
+      assert((await page.inputValue(tid('f-pos1count'))) === '6', 'nilai 6');
+      assert((await page.textContent('.ed-panel')).includes('10 tersedia'), 'info ayat tersedia');
+    });
+
+    await step('Pos 1: puzzle 6 dari 10 ayat, urut mushaf, Arab kanan-ke-kiri', async () => {
+      await startGameAt();
+      await openPos(18, 15);
+      await page.waitForSelector(tid('verse-puzzle'));
+      assert((await page.textContent('.ch-count')).includes('dari 6'), '6 ayat');
+      assert((await page.getAttribute('[data-board]', 'dir')) === 'rtl', 'rtl');
+      const ids = await sc(() => window.__run.questions.pos1);
+      const nums = ids.map((x) => Number(x.slice(1)));
+      assert(nums.join() === [...nums].sort((a, b) => a - b).join(), 'urut: ' + nums);
+      await page.waitForFunction(() => document.querySelector('[data-testid="hud-timer"]').textContent.includes('Pos 1'), null, { timeout: 3000 });
+      await page.screenshot({ path: path.join(OUT, 'game-puzzle.png') });
+    });
+
+    await step('Pos 1: seret-dan-lepas memindahkan balok', async () => {
+      const before = await boardTexts();
+      const a = await page.locator('[data-testid="vblock"] >> nth=0').boundingBox();
+      const b = await page.locator('[data-testid="vblock"] >> nth=3').boundingBox();
+      await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(a.x + a.width / 2 + 10, a.y + a.height / 2, { steps: 3 });
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 });
+      await page.mouse.up();
+      const after = await boardTexts();
+      assert(after[3] === before[0], `balok pindah: ${before} → ${after}`);
+    });
+
+    await step('Pos 1: benar → skor & jembatan bertambah; salah 2x → susunan benar ditampilkan, nilai 0', async () => {
+      await solveBoard();
+      await page.click(tid('verse-check'));
+      await page.waitForSelector('.fb.ok');
+      assert((await page.textContent('.bridge-meter small')).includes('1/6'), 'jembatan 1/6');
+      assert((await page.textContent(tid('hud-score'))).includes('10'), 'skor 10');
+      await page.click(tid('verse-next'));
+      // ayat ke-2: periksa tanpa mengubah (susunan acak pasti salah) dua kali
+      await page.click(tid('verse-check'));
+      await page.waitForSelector('.fb.bad');
+      await page.click(tid('verse-check'));
+      await page.waitForSelector('.fb.info');
+      const v = await currentVerse();
+      assert((await boardTexts()).join() === v.segments.join(), 'susunan benar ditampilkan');
+      assert((await page.textContent(tid('hud-score'))).includes('6'), 'skor 10 − 2 − 2 = 6');
+      await page.click(tid('verse-next'));
+    });
+
+    await step('Pos 1 selesai → jembatan tersambung', async () => {
+      for (let k = 0; k < 4; k++) {
+        await solveBoard();
+        await page.click(tid('verse-check'));
+        await page.waitForSelector('.fb.ok');
+        await page.click(tid('verse-next'));
+      }
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`);
+      assert((await page.textContent(tid('lumi-dialog'))).includes('Jembatan tersambung'), 'pesan jembatan');
+      await closeDialogs();
+      assert(await sc(() => window.__jc.scene.canStand((21 - 15) * 32, (21 + 15) * 16)), 'jembatan bisa dilalui');
+      assert(await sc(() => window.__run.pos.pos1.status === 'done' && window.__run.pos.pos1.bonus === 20), 'bonus pos 1');
+    });
+
+    await step('Pos 2: salah → nyawa berkurang & kunci TIDAK ditampilkan', async () => {
+      await openPos(37.6, 15);
+      await page.waitForSelector(tid('battle-quiz'));
+      assert((await page.textContent(tid('golem-hp'))).trim() === '4/4', 'energi 4/4');
+      await page.screenshot({ path: path.join(OUT, 'game-battle.png') });
+      const wrong = page.locator(tid('battle-opt'), { hasText: 'Salah' }).first();
+      await wrong.click();
+      await page.waitForSelector('.fb.bad');
+      assert((await page.$$('.opt-btn.ok')).length === 0, 'kunci tidak ditampilkan');
+      assert((await page.$$('.hearts span.on')).length === 2, 'nyawa 2');
+    });
+
+    await step('Pos 2: semua benar → energi golem habis, golem menyingkir', async () => {
+      for (let k = 0; k < 4; k++) {
+        await page.waitForSelector(`${tid('battle-opt')}:not([disabled])`);
+        await page.locator(tid('battle-opt'), { hasText: 'Benar' }).first().click();
+        await page.waitForTimeout(1200);
+      }
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`);
+      assert((await page.textContent(tid('lumi-dialog'))).includes('Golem kalah'), 'golem kalah');
+      await closeDialogs();
+      assert(await sc(() => window.__jc.scene.canStand((40 - 15) * 32, (40 + 15) * 16)), 'jalan terbuka');
+    });
+
+    await step('Pos 3: refleksi satu per satu, validasi panjang jawaban', async () => {
+      await openPos(53.4, 15);
+      await page.waitForSelector(tid('reflection'));
+      await page.fill(tid('reflect-text'), 'pendek');
+      await page.click(tid('reflect-save'));
+      assert((await page.textContent('.ch-feedback')).includes('terlalu singkat'), 'validasi panjang');
+      await page.fill(tid('reflect-text'), 'Kami belajar untuk rendah hati dan jujur.');
+      await page.click(tid('reflect-save'));
+      await page.click('.reflect-choice >> nth=1');
+      await page.click(tid('reflect-save'));
+      await page.click('.reflect-choice >> nth=0');
+      await page.click(tid('reflect-save'));
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`);
+      assert((await page.textContent(tid('lumi-dialog'))).includes('Penjelajah Cahaya'), 'gelar');
+    });
+
+    await step('Layar akhir: nilai akhir, lalu Jawaban Soal Battle Quiz di bawahnya', async () => {
+      await closeDialogs(); // pesan gelar → tombol Lihat Hasil
+      await page.waitForSelector(tid('result-sheet'));
+      const shown = Number((await page.textContent(`${tid('final-score')} b`)).trim());
+      // Pos1: 5×10 −2 −2 +20 = 66 · Pos2: 4×10 −2 +20 = 58 · Pos3: auto 10 + 20 = 30 → 154
+      assert(shown === 154, 'nilai akhir ' + shown);
+      const keys = await page.textContent(tid('battle-keys'));
+      assert(keys.includes('Benar0') && keys.includes('Kunci jawaban'), 'kunci battle tampil');
+      const yScore = (await page.locator(tid('final-score')).boundingBox()).y;
+      const yKeys = (await page.locator(tid('battle-keys')).boundingBox()).y;
+      assert(yKeys > yScore, 'kunci di bawah nilai');
+      assert((await page.textContent(tid('result-sheet'))).includes('Penjelajah Cahaya'), 'gelar di lembar hasil');
+      await page.screenshot({ path: path.join(OUT, 'game-result.png'), fullPage: false });
+    });
+
+    await step('Unduh hasil: CSV (Excel) & JSON', async () => {
+      const [d1] = await Promise.all([page.waitForEvent('download'), page.click(tid('dl-csv'))]);
+      const f1 = path.join(OUT, 'hasil.csv');
+      await d1.saveAs(f1);
+      const csv = fs.readFileSync(f1, 'utf8');
+      assert(csv.includes('Skor total;154') && csv.includes('Kunci'), 'isi CSV');
+      assert(d1.suggestedFilename().endsWith('.csv'), 'nama file');
+      const [d2] = await Promise.all([page.waitForEvent('download'), page.click(tid('dl-json'))]);
+      const f2 = path.join(OUT, 'hasil.json');
+      await d2.saveAs(f2);
+      const j = JSON.parse(fs.readFileSync(f2, 'utf8'));
+      assert(j.summary.score === 154 && j.details.length === 13, 'isi JSON');
+    });
+
+    await step('Waktu pos habis: tantangan ditutup, nilai 0, jalan tetap terbuka', async () => {
+      await startGameAt();
+      await openPos(18, 15);
+      await page.waitForSelector(tid('verse-puzzle'));
+      await sc(() => (window.__run.pos.pos1.startedAt -= 11 * 60 * 1000));
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`);
+      assert((await page.textContent(tid('lumi-dialog'))).includes('habis'), 'pesan waktu habis');
+      assert(!(await page.isVisible(tid('verse-puzzle'))), 'puzzle ditutup');
+      await closeDialogs();
+      assert(await sc(() => window.__run.pos.pos1.timeout && window.__run.pos.pos2.status === 'active'), 'pos 2 terbuka');
+      assert(await sc(() => window.__jc.scene.canStand((21 - 15) * 32, (21 + 15) * 16)), 'jembatan terbuka');
+    });
+
+    await step('Keluar di tengah permainan menyimpan hasil sementara', async () => {
+      await page.click(tid('btn-exit'));
+      await page.click('[data-yes]');
+      await page.waitForSelector(tid('save'));
+      await page.goto(BASE + '#/guru');
+      await page.waitForSelector(tid('result-card'));
+      const txt = await page.textContent(tid('result-list'));
+      assert(txt.includes('Belum selesai') && txt.includes('Penjelajah Cahaya'), 'dua hasil tersimpan');
+    });
+
+    await step('Dashboard: lihat hasil & unduh CSV dari Hasil Tersimpan', async () => {
+      const card = page.locator(tid('result-card'), { hasText: 'Penjelajah Cahaya' });
+      await card.locator('[data-ract="view"]').click();
+      await page.waitForSelector(`.modal ${tid('battle-keys')}`);
+      await page.click('[data-close]');
+      const [d] = await Promise.all([page.waitForEvent('download'), card.locator('[data-ract="csv"]').click()]);
+      const f = path.join(OUT, 'hasil-dashboard.csv');
+      await d.saveAs(f);
+      assert(fs.readFileSync(f, 'utf8').includes('Skor total;154'), 'csv dashboard');
     });
 
     await step('Tidak ada error JavaScript selama pengujian', async () => {

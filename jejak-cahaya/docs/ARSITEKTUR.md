@@ -76,3 +76,13 @@
 - **Input** (`input.js`): keyboard + joystick sentuh HTML.
 - Phaser dimuat terpisah (`import()`) hanya saat bermain, sehingga halaman guru tetap ringan.
 - Tanah dirender sekali ke RenderTexture dengan `batchDraw` (waktu muat ±1 detik).
+
+## Tahap 3: tantangan & penilaian
+
+- `src/scoring/run.js`: satu "run" per kelompok, berisi soal terpilih (benih acak tetap), jawaban, nyawa, status & waktu pos.
+  Fungsi murni: `selectQuestions`, `recordAnswer` (menolak jawaban ganda, pos tertutup, dan kesempatan habis),
+  `finishPos` (bonus hanya bila tidak kehabisan waktu), `totals` (total tidak negatif). Pada Tahap 4 logika yang sama
+  dipindahkan ke server, sehingga kunci jawaban tidak lagi dikirim ke perangkat siswa.
+- `src/student/challenges/`: `verse-puzzle.js` (seret-dan-lepas, ketuk-tukar, keyboard; RTL), `battle-quiz.js`, `reflection.js`.
+- `src/results/`: `result-report.js` (ringkasan, rincian, CSV/JSON) dan `result-sheet.js` (lembar hasil HTML untuk layar akhir,
+  dashboard, dan cetak). Hasil disimpan lewat `adapter.saveResult`.

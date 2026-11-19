@@ -87,7 +87,11 @@ export function confirmDialog({ title = 'Konfirmasi', message, okText = 'Ya', da
 }
 
 export function downloadJSON(filename, data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  downloadText(filename, JSON.stringify(data, null, 2), 'application/json');
+}
+
+export function downloadText(filename, text, type = 'text/plain;charset=utf-8') {
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

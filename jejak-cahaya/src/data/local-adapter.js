@@ -6,6 +6,7 @@ import { clone } from '../core/ids.js';
 import { normalizeTemplate } from '../config/template-model.js';
 
 const KEY = 'jejak-cahaya:templates:v1';
+const RESULTS_KEY = 'jejak-cahaya:results:v1';
 
 export function memoryStorage() {
   const m = new Map();
@@ -63,5 +64,38 @@ export class LocalAdapter {
 
   async deleteTemplate(id) {
     this._writeAll(this._readAll().filter((x) => x.id !== id));
+  }
+
+  // ---------- hasil permainan ----------
+  _readResults() {
+    try {
+      const list = JSON.parse(this.storage.getItem(RESULTS_KEY) || '[]');
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async listResults() {
+    return this._readResults().sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+  }
+
+  /** Simpan / perbarui hasil (kunci: run.id). */
+  async saveResult(result) {
+    const list = this._readResults();
+    const saved = { ...clone(result), id: result.run.id, savedAt: new Date().toISOString() };
+    const i = list.findIndex((x) => x.id === saved.id);
+    if (i >= 0) list[i] = saved;
+    else list.push(saved);
+    try {
+      this.storage.setItem(RESULTS_KEY, JSON.stringify(list));
+    } catch {
+      throw new Error('Penyimpanan browser penuh. Unduh hasil sebagai file agar tidak hilang.');
+    }
+    return saved;
+  }
+
+  async deleteResult(id) {
+    this.storage.setItem(RESULTS_KEY, JSON.stringify(this._readResults().filter((x) => x.id !== id)));
   }
 }

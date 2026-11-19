@@ -7,6 +7,13 @@ import { CHARACTERS, CHARACTER_BY_ID, POS_DEFS, POS_BY_ID } from '../core/consta
 import { characterSVG, lumiSVG } from '../ui/characters.js';
 import { esc, toast } from '../ui/ui.js';
 import { QuestState } from '../game/systems/quest.js';
+import { createRun, startPos, finishPos, finishRun, totals, formatDuration } from '../scoring/run.js';
+import { toJSON, toCSV, resultFileName } from '../results/result-report.js';
+import { resultSheetHTML } from '../results/result-sheet.js';
+import { openVersePuzzle } from './challenges/verse-puzzle.js';
+import { openBattleQuiz } from './challenges/battle-quiz.js';
+import { openReflection } from './challenges/reflection.js';
+import { confirmDialog, downloadJSON, downloadText } from '../ui/ui.js';
 import { touchInput } from '../game/systems/input.js';
 
 export async function renderPlay(root, { id }) {
@@ -91,6 +98,10 @@ async function startPlay(root, t, group, charId) {
         ${characterSVG(charId, { size: 38 })}
         <div><b>${esc(group.name)}</b><small data-region>—</small></div>
       </div>
+      <div class="hud-stats">
+        <span class="hud-chip" data-score data-testid="hud-score">⭐ 0</span>
+        <span class="hud-chip" data-timer data-testid="hud-timer">⏳ --:--</span>
+      </div>
     </div>
     <div class="hud hud-right">
       <ol class="quest-track" data-quest aria-label="Progres misi"></ol>
@@ -107,9 +118,8 @@ async function startPlay(root, t, group, charId) {
     <div class="test-panel panel" data-test-panel hidden data-testid="test-panel">
       <h3>Panel Uji Guru</h3>
       <label class="check"><input type="checkbox" data-free data-testid="free-explore"><span>Jelajah bebas (abaikan gerbang & golem)</span></label>
-      <p class="field-label">Simulasikan pos selesai</p>
-      <div class="test-row">${POS_DEFS.map((p, i) => `<button class="btn btn-sm" data-complete="${p.id}" data-testid="complete-${p.id}">Pos ${i + 1}</button>`).join('')}
-        <button class="btn btn-sm btn-ghost" data-reset-quest>Atur ulang</button></div>
+      <p class="field-label">Lewati pos (tanpa nilai)</p>
+      <div class="test-row">${POS_DEFS.map((p, i) => `<button class="btn btn-sm" data-complete="${p.id}" data-testid="complete-${p.id}">Pos ${i + 1}</button>`).join('')}</div>
       <p class="field-label">Uji animasi</p>
       <div class="test-row">${[['jump', 'Lompat'], ['interact', 'Interaksi'], ['victory', 'Menang'], ['defeat', 'Kalah']].map(([a, l]) => `<button class="btn btn-sm" data-anim="${a}" data-testid="anim-${a}">${l}</button>`).join('')}</div>
       <p class="hint">Diam, berjalan, dan berlari terlihat saat karakter digerakkan (Shift / joystick ditarik penuh untuk berlari).</p>
@@ -123,6 +133,9 @@ async function startPlay(root, t, group, charId) {
       </div>
     </div>
 
+    <div class="challenge-layer" data-challenge hidden><div class="challenge panel" data-ch-panel></div></div>
+    <div class="result-layer" data-result hidden></div>
+
     <div class="lumi-dialog panel" data-dialog hidden role="dialog" aria-live="polite" data-testid="lumi-dialog">
       <div class="lumi-face">${lumiSVG({ size: 64 })}</div>
       <div class="lumi-text"><b>Lumi</b><p data-dialog-text></p></div>
@@ -132,8 +145,11 @@ async function startPlay(root, t, group, charId) {
 
   const $ = (s) => root.querySelector(s);
   const quest = new QuestState();
+  const run = createRun(t, { groupId: group.id, groupName: group.name, character: charId });
   let api = null;
   let destroyed = false;
+  let openPos = null; // pos yang tantangannya sedang terbuka
+    window.__run = run; // dipakai uji otomatis
 
   // ----- dialog Lumi (antrian) -----
   const dialogQueue = [];
@@ -148,7 +164,7 @@ async function startPlay(root, t, group, charId) {
     if (!d) {
       box.hidden = true;
       dialogOpen = false;
-      api?.setPaused(false);
+      api?.setPaused(!!openPos); // tetap berhenti bila tantangan sedang terbuka
       return;
     }
     dialogOpen = true;
@@ -175,42 +191,155 @@ async function startPlay(root, t, group, charId) {
   const STATUS = { locked: ['🔒', 'Terkunci'], active: ['✨', 'Sedang dituju'], done: ['✅', 'Selesai'] };
   const drawQuest = () => {
     $('[data-quest]').innerHTML = POS_DEFS.map((p, i) => {
-      const [ic, label] = STATUS[quest.status[p.id]];
-      return `<li class="qt ${quest.status[p.id]}" title="${esc(p.name)}: ${label}"><span aria-hidden="true">${p.icon}</span><b>Pos ${i + 1}</b><span class="qt-st" aria-label="${label}">${ic}</span></li>`;
+      const st = run.pos[p.id].status;
+      const [ic, label] = STATUS[st];
+      return `<li class="qt ${st}" title="${esc(p.name)}: ${label}"><span aria-hidden="true">${p.icon}</span><b>Pos ${i + 1}</b><span class="qt-st" aria-label="${label}">${ic}</span></li>`;
     }).join('');
   };
   quest.on(drawQuest);
   drawQuest();
 
-  // ----- interaksi pos -----
+  // ----- interaksi pos & tantangan -----
+  const adapter = getAdapter();
+  const saveResult = async () => {
+    try {
+      await adapter.saveResult(toJSON(run, t));
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+  const updateScore = () => {
+    $('[data-score]').textContent = `⭐ ${totals(run, t).score}`;
+  };
+
   const posMessage = (posId) => {
     const p = POS_BY_ID[posId];
-    const n = POS_DEFS.indexOf(p) + 1;
-    const count = t.questionBank.pos.find((x) => x.id === posId).questions.length;
-    const st = quest.status[posId];
+    const st = run.pos[posId].status;
+    const count = run.questions[posId].length;
     if (st === 'done') return showDialog(`<b>${esc(p.name)}</b> sudah kalian taklukkan. Ayo lanjutkan perjalanan!`);
+    if (st === 'locked') return showDialog('Pos ini masih tertutup. Selesaikan pos sebelumnya terlebih dahulu.');
+    if (run.pos[posId].startedAt) return openChallenge(posId); // lanjutkan
+    const mins = t.timing[`${posId}Minutes`];
     const intro = {
-      pos1: `Ini <b>Jembatan Wahyu</b>. Jembatannya terputus! Susun ${count} potongan ayat dengan urutan yang benar agar batu-batu jembatan tersambung kembali.`,
-      pos2: `Hati-hati! Golem batu penjaga <b>Lembah Kaum Tsamud</b> menghadang. Ia lambang kesombongan. Jawab pertanyaan dengan benar untuk mengurangi energinya. Jawaban salah akan dibalas serangannya, jadi jaga ${t.rules.teamHearts} nyawa kelompok kalian!`,
-      pos3: `Selamat datang di <b>Taman Cahaya</b>. Buka prasasti ini dan renungkan ${count} pertanyaan refleksi bersama kelompok.`,
-    }[posId];
-    showDialog(`${intro}<br><small class="hint">Tantangan Pos ${n} (${esc(p.mechanic)}) dibangun pada Tahap 3. Gunakan Panel Uji 🧪 untuk menyimulasikan pos selesai.</small>`, [
-      { label: '✔ Simulasikan selesai', primary: true, onClick: () => completePos(posId) },
+      pos1: `Ini <b>Jembatan Wahyu</b>. Jembatannya terputus! Susun <b>${count} ayat</b> dengan urutan yang benar. Setiap ayat yang benar menyambungkan batu-batu jembatan.`,
+      pos2: `Hati-hati! Golem batu penjaga <b>Lembah Kaum Tsamud</b>, lambang kesombongan, menghadang. Jawab <b>${count} soal</b> untuk menguras energinya. Jawaban salah akan dibalas seranganya. Jaga <b>${t.rules.teamHearts} nyawa</b> kelompok kalian!`,
+      pos3: `Selamat datang di <b>Taman Cahaya</b>. Prasasti ini menyimpan <b>${count} pertanyaan refleksi</b>. Jawablah bersama kelompok dengan jujur.`,
+    }[posId].replace('seranganya', 'serangannya');
+    showDialog(`${intro}<br><small class="hint">⏳ Waktu pos ini ${mins} menit, dimulai saat tantangan dibuka.</small>`, [
+      { label: '▶ Mulai tantangan', primary: true, onClick: () => setTimeout(() => openChallenge(posId), 0) },
       { label: 'Nanti saja' },
     ]);
   };
 
-  const completePos = (posId) => {
-    if (quest.status[posId] === 'done') return;
+  const closeChallenge = () => {
+    $('[data-challenge]').hidden = true;
+    $('[data-ch-panel]').innerHTML = '';
+    openPos = null;
+    api?.setPaused(false);
+    root.querySelector('.play').classList.remove('in-challenge');
+  };
+
+  const openChallenge = (posId) => {
+    if (run.pos[posId].status !== 'active' || run.finished) return;
+    startPos(run, posId);
+    openPos = posId;
+    api?.setPaused(true);
+    root.querySelector('.play').classList.add('in-challenge');
+    $('[data-challenge]').hidden = false;
+    $('[data-challenge]').dataset.pos = posId;
+    const ctx = {
+      panel: $('[data-ch-panel]'),
+      t,
+      run,
+      api,
+      alive: () => openPos === posId,
+      say: (m) => toast(m, 'error'),
+      onAnswer: () => {
+        updateScore();
+        saveResult();
+      },
+      onProgress: (f) => api?.setBridgeProgress(f),
+      onClose: closeChallenge,
+      onFinish: (info = {}) => completePos(posId, { ...info }),
+    };
+    if (posId === 'pos1') openVersePuzzle(ctx);
+    if (posId === 'pos2') openBattleQuiz(ctx);
+    if (posId === 'pos3') openReflection(ctx);
+  };
+
+  const completePos = (posId, { timeout = false, defeated = true, skipped = false } = {}) => {
+    if (run.pos[posId].status === 'done') return;
+    if (openPos === posId) closeChallenge();
+    finishPos(run, t, posId, { timeout: timeout || skipped });
     quest.complete(posId);
-    api?.lumi('happy');
-    api?.playAnim('victory');
-    const msg = {
-      pos1: 'Jembatan tersambung! Cahaya membuka jalan menuju lembah.',
-      pos2: 'Golem minggir! Jalan menuju Taman Cahaya terbuka.',
-      pos3: 'Refleksi selesai. Kalian kini bergelar <b>Penjelajah Cahaya</b>! ✨',
-    }[posId];
-    showDialog(msg);
+    drawQuest();
+    updateScore();
+    saveResult();
+    if (timeout) {
+      api?.lumi('sad');
+      showDialog(`⏰ Waktu <b>${esc(POS_BY_ID[posId].name)}</b> habis. Soal yang belum dijawab bernilai 0, tetapi jalan tetap terbuka. Ayo lanjutkan!`);
+    } else {
+      api?.lumi('happy');
+      api?.playAnim('victory');
+      const msg = {
+        pos1: `Jembatan tersambung! ${skipped ? '' : `Bonus penyelesaian +${t.rules.completionBonus}. `}Cahaya membuka jalan menuju lembah.`,
+        pos2: defeated ? 'Golem kalah dan menyingkir! Kesombongan tidak bisa menghalangi ilmu. Jalan menuju Taman Cahaya terbuka.' : 'Golem kelelahan dan menyingkir. Jalan menuju Taman Cahaya terbuka.',
+        pos3: 'Refleksi tersimpan. Kalian kini bergelar <b>Penjelajah Cahaya</b>! ✨',
+      }[posId];
+      showDialog(msg);
+    }
+    if (posId === 'pos3') showDialog('Mari kita lihat hasil perjalanan kalian.', [{ label: '🏆 Lihat Hasil', primary: true, onClick: () => showResult() }]);
+  };
+
+  const endByTime = () => {
+    if (openPos) closeChallenge();
+    finishRun(run);
+    saveResult();
+    showDialog('⏰ Waktu total permainan sudah habis. Perjalanan berhenti di sini.', [{ label: '🏆 Lihat Hasil', primary: true, onClick: () => showResult() }]);
+  };
+
+  // ----- timer (Tahap 4: mengacu ke jam server) -----
+  const timerEl = $('[data-timer]');
+  const tick = () => {
+    if (destroyed || run.finished) return;
+    const now = Date.now();
+    const totalLeft = Math.ceil((run.startedAt + t.timing.totalMinutes * 60000 - now) / 1000);
+    const active = POS_DEFS.find((p) => run.pos[p.id].status === 'active' && run.pos[p.id].startedAt);
+    let posLeft = null;
+    if (active) {
+      posLeft = Math.ceil((run.pos[active.id].startedAt + t.timing[`${active.id}Minutes`] * 60000 - now) / 1000);
+      if (posLeft <= 0) return completePos(active.id, { timeout: true });
+    }
+    if (totalLeft <= 0) return endByTime();
+    const shown = posLeft ?? totalLeft;
+    timerEl.textContent = `⏳ ${active ? `Pos ${POS_DEFS.indexOf(active) + 1}` : 'Total'} ${formatDuration(Math.max(0, shown))}`;
+    timerEl.classList.toggle('low', shown <= 60);
+  };
+  const timerId = setInterval(tick, 500);
+
+  // ----- layar hasil -----
+  const showResult = () => {
+    if (!run.finished) finishRun(run);
+    saveResult();
+    const data = toJSON(run, t);
+    const layer = $('[data-result]');
+    layer.hidden = false;
+    layer.innerHTML = `
+      <div class="result-wrap">
+        <div class="confetti" aria-hidden="true">${Array.from({ length: 24 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</div>
+        ${resultSheetHTML(data)}
+        <div class="result-actions no-print">
+          <button class="btn btn-primary" data-dl="csv" data-testid="dl-csv">⬇️ Unduh CSV (Excel)</button>
+          <button class="btn" data-dl="json" data-testid="dl-json">⬇️ Unduh JSON</button>
+          <button class="btn btn-gold" data-dl="print">🖨️ Cetak / Simpan PDF</button>
+          <button class="btn btn-ghost" data-dl="close">🗺️ Kembali ke peta</button>
+        </div>
+        <p class="hint no-print">Hasil juga tersimpan di perangkat ini dan dapat diunduh ulang dari Dashboard Guru → Hasil Tersimpan.</p>
+      </div>`;
+    layer.querySelector('[data-dl="csv"]').onclick = () => downloadText(resultFileName(run, 'csv'), toCSV(run, t), 'text/csv;charset=utf-8');
+    layer.querySelector('[data-dl="json"]').onclick = () => downloadJSON(resultFileName(run, 'json'), toJSON(run, t));
+    layer.querySelector('[data-dl="print"]').onclick = () => window.print();
+    layer.querySelector('[data-dl="close"]').onclick = () => (layer.hidden = true);
   };
 
   const hooks = {
@@ -232,6 +361,7 @@ async function startPlay(root, t, group, charId) {
     },
     onNear() {},
     onInteract(target) {
+      if (openPos || dialogOpen) return;
       if (target === 'sign') return showDialog('Titik awal petualangan. Ikuti jalan keemasan menuju gerbang bercahaya di tepi sungai!');
       posMessage(target);
     },
@@ -245,7 +375,18 @@ async function startPlay(root, t, group, charId) {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'map') hooks.onOverview(api?.toggleOverview());
     if (act === 'test') $('[data-test-panel]').hidden = !$('[data-test-panel]').hidden;
-    if (act === 'exit') navigate(`/guru/edit/${t.id}/identitas`);
+    if (act === 'exit') {
+      if (!run.finished) {
+        const ok = await confirmDialog({
+          title: 'Keluar dari permainan?',
+          message: 'Hasil sementara kelompok ini akan disimpan di perangkat dan dapat diunduh dari Dashboard Guru → Hasil Tersimpan.',
+          okText: 'Simpan & keluar',
+        });
+        if (!ok) return;
+        await saveResult();
+      }
+      navigate(`/guru/edit/${t.id}/identitas`);
+    }
   };
   root.querySelector('[data-act="help"]').onclick = (e) => {
     e.stopPropagation();
@@ -255,8 +396,11 @@ async function startPlay(root, t, group, charId) {
   };
   const panel = $('[data-test-panel]');
   panel.querySelector('[data-free]').onchange = (e) => api?.setFreeExplore(e.target.checked);
-  panel.querySelectorAll('[data-complete]').forEach((b) => (b.onclick = () => completePos(b.dataset.complete)));
-  panel.querySelector('[data-reset-quest]').onclick = () => quest.reset();
+  panel.querySelectorAll('[data-complete]').forEach((b) => (b.onclick = () => {
+    const id = b.dataset.complete;
+    if (run.pos[id].status !== 'active') return toast('Pos ini belum terbuka atau sudah selesai.', 'error');
+    completePos(id, { skipped: true });
+  }));
   panel.querySelectorAll('[data-anim]').forEach((b) => (b.onclick = () => {
     api?.playAnim(b.dataset.anim);
     if (b.dataset.anim === 'defeat') api?.lumi('sad');
@@ -268,6 +412,7 @@ async function startPlay(root, t, group, charId) {
   // ----- muat game (Phaser dimuat terpisah) -----
   setLeaveGuard(async () => {
     destroyed = true;
+    clearInterval(timerId);
     document.removeEventListener('keydown', onDialogKey);
     api?.destroy();
     return true;

@@ -17,7 +17,7 @@ Aplikasi **tidak terikat pada satu materi**. Semua soal berasal dari bank soal y
 |---|---|---|
 | 1 | Fondasi: beranda, dashboard guru, konfigurasi ujian, kelompok, bank soal manual & JSON | ✅ Selesai |
 | 2 | Phaser, pilih karakter, animasi, kamera isometrik, peta 3 wilayah | ✅ Selesai |
-| 3 | Puzzle ayat, Battle Quiz, refleksi, skor & progres | ⏳ |
+| 3 | Puzzle ayat, Battle Quiz, refleksi, skor & progres, unduh hasil | ✅ Selesai |
 | 4 | Supabase: login guru, kode/QR sesi, multiplayer real-time, validasi skor di server | ⏳ |
 | 5 | Rekap, peringkat, ekspor CSV/XLSX/JSON, pengujian menyeluruh | ⏳ |
 
@@ -36,7 +36,21 @@ Buka konfigurasi di Mode Guru → **▶ Uji Coba Main** → pilih kelompok & kar
 | Interaksi (pos, papan) | E / Enter | tombol ✋ |
 | Peta penuh | M / tombol 🗺️ | tombol 🗺️ |
 
-Panel 🧪 (khusus uji coba guru): jelajah bebas, simulasi pos selesai, dan uji animasi.
+Panel 🧪 (khusus uji coba guru): jelajah bebas, lewati pos, dan uji animasi.
+
+## Tantangan & hasil (Tahap 3)
+
+| Pos | Cara main | Aturan |
+|---|---|---|
+| 1 · Jembatan Wahyu | Seret balok ayat (atau ketuk dua balok untuk menukar), lalu **Periksa** | Jumlah ayat diatur guru (mis. 6 dari 10), dipilih acak per kelompok, tampil urut mushaf. Benar = batu jembatan bertambah. Kesempatan habis = nilai 0 dan susunan benar ditampilkan. |
+| 2 · Lembah Kaum Tsamud | Pilih jawaban untuk menyerang golem | Benar = energi golem −1. Salah = serangan balasan, nyawa −1, kunci **tidak** ditampilkan. Nyawa habis = terpental, nyawa pulih, lanjut. |
+| 3 · Taman Cahaya | Jawab refleksi satu per satu | Isian singkat (minimal N karakter) / pilihan situasi. Selesai = gelar **Penjelajah Cahaya**. |
+
+- Timer setiap pos dimulai saat tantangan dibuka. Bila waktu habis, soal tersisa bernilai 0 dan jalan tetap terbuka.
+- **Layar akhir**: nilai akhir, rincian per pos, lalu **Jawaban Soal Battle Quiz** (jawaban kelompok + kunci),
+  susunan ayat yang benar, dan jawaban refleksi.
+- **Unduh hasil**: CSV (dibuka di Excel), JSON, atau Cetak/Simpan PDF. Hasil juga tersimpan otomatis di perangkat
+  dan bisa diunduh ulang dari **Dashboard Guru → Hasil Tersimpan**, termasuk hasil sementara bila permainan dihentikan.
 
 ## Menjalankan
 

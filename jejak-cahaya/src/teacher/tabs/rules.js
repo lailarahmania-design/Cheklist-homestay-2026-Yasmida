@@ -2,6 +2,7 @@ import { checkTemplate, maxPossibleScore } from '../../config/template-model.js'
 import { bindFields, issuesHTML } from './bind.js';
 
 export function renderRulesTab(panel, ctx) {
+  const pos1Count = ctx.t.questionBank.pos.find((p) => p.id === 'pos1').questions.length;
   const pos2Count = ctx.t.questionBank.pos.find((p) => p.id === 'pos2').questions.length;
   panel.innerHTML = `
   <h2>Peraturan & Penilaian</h2>
@@ -19,6 +20,17 @@ export function renderRulesTab(panel, ctx) {
     </div>
   </fieldset>
   <fieldset class="fieldset">
+    <legend>Jumlah soal yang dipakai</legend>
+    <div class="grid-2">
+      <label class="field"><span>Jumlah ayat Pos 1 (puzzle)</span>
+        <input type="number" min="0" step="1" data-path="rules.pos1QuestionCount" data-testid="f-pos1count">
+        <small>0 = semua ayat (${pos1Count} tersedia). Contoh: bank berisi ayat 1–10, isi 5 atau 6. Ayat dipilih acak per kelompok lalu ditampilkan sesuai urutan bank soal.</small></label>
+      <label class="field"><span>Jumlah soal Battle Quiz (Pos 2)</span>
+        <input type="number" min="0" step="1" data-path="rules.pos2QuestionCount" data-testid="f-pos2count">
+        <small>0 = semua soal Pos 2 (${pos2Count} tersedia). Energi golem = jumlah soal.</small></label>
+    </div>
+  </fieldset>
+  <fieldset class="fieldset">
     <legend>Kesempatan & Battle Quiz</legend>
     <div class="grid-3">
       <label class="field"><span>Kesempatan menjawab per soal</span>
@@ -27,11 +39,10 @@ export function renderRulesTab(panel, ctx) {
       <label class="field"><span>Nyawa kelompok (❤)</span>
         <input type="number" min="1" max="10" step="1" data-path="rules.teamHearts" data-testid="f-hearts">
         <small>Jawaban salah di Battle Quiz mengurangi 1 nyawa (serangan balasan golem).</small></label>
-      <label class="field"><span>Jumlah soal Battle Quiz</span>
-        <input type="number" min="0" step="1" data-path="rules.pos2QuestionCount" data-testid="f-pos2count">
-        <small>0 = semua soal Pos 2 (${pos2Count} tersedia). Energi golem = jumlah soal.</small></label>
     </div>
-    <div class="note">Jika nyawa habis, kelompok mengulang pertarungan dengan soal yang belum terjawab benar. Skor yang sudah diperoleh tetap tersimpan.</div>
+    <div class="note">Jika nyawa habis, kelompok mengulang pertarungan dengan soal yang belum terjawab benar. Skor yang sudah diperoleh tetap tersimpan.
+      Jika kesempatan sebuah soal habis, soal bernilai 0 (puzzle: susunan benar ditampilkan) lalu lanjut ke soal berikutnya.
+      Kunci jawaban Battle Quiz ditampilkan di layar akhir setelah nilai akhir.</div>
   </fieldset>
   <fieldset class="fieldset">
     <legend>Pengacakan</legend>

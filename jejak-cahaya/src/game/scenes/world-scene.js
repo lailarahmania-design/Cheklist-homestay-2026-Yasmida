@@ -112,11 +112,14 @@ export class WorldScene extends Phaser.Scene {
     const b = toScreen(RIVER.from, MID);
     this.barrier = this.add.image(b.x - 8, b.y + 14, 'obj-barrier').setOrigin(0.5, 1).setScale(1 / SCALE).setDepth(b.y + 1);
     this.tweens.add({ targets: this.barrier, alpha: 0.55, duration: 900, yoyo: true, repeat: -1 });
-    // Batu jembatan yang hilang (muncul saat jembatan tersambung)
-    this.bridgeGap = BRIDGE_ROWS.map((gy) => {
-      const p = toScreen(RIVER.from + 1, gy);
-      return this.add.image(p.x, p.y, 'tile-water-0').setDepth(-99999);
-    });
+    // Batu jembatan yang belum tersambung: ditutup air, dibuka bertahap per ayat benar.
+    this.bridgeCovers = [];
+    for (let gx = RIVER.from; gx <= RIVER.to; gx++)
+      for (const gy of BRIDGE_ROWS) {
+        const p = toScreen(gx, gy);
+        this.bridgeCovers.push(this.add.image(p.x, p.y, `tile-water-${(gx + gy) % 3}`).setDepth(-99999));
+      }
+    this.bridgeProgress = 0;
     // Golem bernapas
     const g = this.objectSprites.golem;
     this.tweens.add({ targets: g, scaleY: g.scaleY * 1.03, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -152,13 +155,51 @@ export class WorldScene extends Phaser.Scene {
     const open1 = this.freeExplore || this.unlocked.has('pos1');
     const open2 = this.freeExplore || this.unlocked.has('pos2');
     this.barrier.setVisible(!open1);
-    this.bridgeGap.forEach((img) => img.setVisible(!open1));
+    this.setBridgeProgress(open1 ? 1 : this.bridgeProgress, animate);
     const g = this.objectSprites.golem;
     const home = toScreen(GOLEM_LINE, MID);
     const aside = toScreen(GOLEM_LINE, MID - 3);
     const dest = open2 ? aside : home;
     if (animate) this.tweens.add({ targets: g, x: dest.x, y: dest.y + TH / 4, duration: 1200, ease: 'Sine.easeInOut', onUpdate: () => g.setDepth(g.y) });
     else g.setPosition(dest.x, dest.y + TH / 4).setDepth(dest.y);
+  }
+
+  /** Menampilkan batu jembatan sesuai progres puzzle (0..1). */
+  setBridgeProgress(frac, animate = true) {
+    if (!(this.freeExplore || this.unlocked.has('pos1'))) this.bridgeProgress = frac;
+    const n = Math.round(this.bridgeCovers.length * Math.max(0, Math.min(1, frac)));
+    this.bridgeCovers.forEach((img, i) => {
+      const hide = i < n;
+      if (hide && img.visible && animate) {
+        this.tweens.add({ targets: img, alpha: 0, duration: 500, onComplete: () => img.setVisible(false) });
+        this.add.particles(img.x, img.y, 'p-spark', { speed: { min: 20, max: 60 }, lifespan: 600, scale: { start: 0.8, end: 0 }, blendMode: 'ADD', emitting: false }).explode(8);
+      } else if (!hide) img.setVisible(true).setAlpha(1);
+      else if (!animate) img.setVisible(false);
+    });
+  }
+
+  /** Golem terkena jawaban benar. */
+  golemHit() {
+    const g = this.objectSprites.golem;
+    g.setTint(0xffb3a0);
+    this.time.delayedCall(220, () => g.clearTint());
+    this.tweens.add({ targets: g, x: g.x + 6, duration: 50, yoyo: true, repeat: 3 });
+    this.add.particles(g.x, g.y - 60, 'p-star', { speed: { min: 60, max: 140 }, lifespan: 600, scale: { start: 0.8, end: 0 }, gravityY: 200, emitting: false }).explode(10);
+    this.player.play('interact');
+  }
+
+  /** Serangan balasan golem saat jawaban salah. */
+  golemAttack(knockedOut) {
+    const g = this.objectSprites.golem;
+    const p = this.player;
+    this.tweens.add({ targets: g, x: g.x + (p.x - g.x) * 0.25, y: g.y + (p.y - g.y) * 0.25, duration: 160, yoyo: true, ease: 'Quad.easeIn' });
+    this.time.delayedCall(160, () => {
+      this.cameras.main.shake(260, 0.008);
+      p.body.setTint(0xff9a8a);
+      this.time.delayedCall(260, () => p.body.clearTint());
+      if (knockedOut) p.play('defeat');
+      this.lumi.react('sad');
+    });
   }
 
   setFreeExplore(on) {
