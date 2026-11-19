@@ -6,6 +6,7 @@ import { navigate, setLeaveGuard } from '../core/router.js';
 import { CHARACTERS, CHARACTER_BY_ID, POS_DEFS, POS_BY_ID } from '../core/constants.js';
 import { characterSVG, lumiSVG } from '../ui/characters.js';
 import { esc, toast } from '../ui/ui.js';
+import { checkTemplate } from '../config/template-model.js';
 import { QuestState } from '../game/systems/quest.js';
 import { createRun, startPos, finishPos, finishRun, totals, formatDuration } from '../scoring/run.js';
 import { toJSON, toCSV, resultFileName } from '../results/result-report.js';
@@ -16,18 +17,27 @@ import { openReflection } from './challenges/reflection.js';
 import { confirmDialog, downloadJSON, downloadText, canPrint } from '../ui/ui.js';
 import { touchInput } from '../game/systems/input.js';
 
-export async function renderPlay(root, { id }) {
+/**
+ * @param mode 'test' = Uji Coba dari editor guru (ada panel uji); 'student' = Mode Siswa di perangkat ini.
+ */
+export async function renderPlay(root, { id, mode = 'test' }) {
   const t = await getAdapter().getTemplate(id);
   if (!t) {
     toast('Konfigurasi tidak ditemukan.', 'error');
     navigate('/guru');
     return;
   }
-  renderSetup(root, t);
+  if (mode === 'student' && !checkTemplate(t).ready) {
+    toast('Ujian ini belum lengkap. Minta guru melengkapinya di Mode Guru.', 'error');
+    navigate('/main');
+    return;
+  }
+  renderSetup(root, t, mode);
 }
 
 // ---------------- 1. pilih kelompok & karakter ----------------
-function renderSetup(root, t) {
+function renderSetup(root, t, mode) {
+  const backHref = mode === 'student' ? '#/main' : `#/guru/edit/${esc(t.id)}/identitas`;
   let groupId = t.groups[0]?.id;
   let charId = t.groups[0]?.character;
   const allowPick = t.settings.allowCharacterSelect;
@@ -38,8 +48,8 @@ function renderSetup(root, t) {
     root.innerHTML = `
     <div class="setup">
       <header class="setup-head">
-        <a class="btn btn-ghost btn-sm" href="#/guru/edit/${esc(t.id)}/identitas">← Kembali ke editor</a>
-        <span class="badge badge-warn">🧪 Uji Coba Guru · progres tidak disimpan</span>
+        <a class="btn btn-ghost btn-sm" href="${backHref}">← ${mode === 'student' ? 'Pilih ujian lain' : 'Kembali ke editor'}</a>
+        ${mode === 'student' ? '<span class="badge badge-water">🎒 Mode Siswa · perangkat ini</span>' : '<span class="badge badge-warn">🧪 Uji Coba Guru</span>'}
       </header>
       <div class="setup-title">
         ${lumiSVG({ size: 72 })}
@@ -79,13 +89,14 @@ function renderSetup(root, t) {
       charId = b.dataset.char;
       draw();
     }));
-    root.querySelector('[data-start]').onclick = () => startPlay(root, t, t.groups.find((g) => g.id === groupId), charId);
+    root.querySelector('[data-start]').onclick = () => startPlay(root, t, t.groups.find((g) => g.id === groupId), charId, mode);
   };
   draw();
 }
 
 // ---------------- 2. bermain ----------------
-async function startPlay(root, t, group, charId) {
+async function startPlay(root, t, group, charId, mode = 'test') {
+  const exitPath = mode === 'student' ? '/main' : `/guru/edit/${t.id}/identitas`;
   const char = CHARACTER_BY_ID[charId];
   root.innerHTML = `
   <div class="play" data-testid="play">
@@ -108,7 +119,7 @@ async function startPlay(root, t, group, charId) {
       <div class="hud-buttons">
         <button class="icon-btn hud-btn" data-act="map" title="Peta penuh (M)" aria-label="Peta penuh" data-testid="btn-map">🗺️</button>
         <button class="icon-btn hud-btn" data-act="help" title="Bantuan kontrol" aria-label="Bantuan" data-testid="btn-help">❔</button>
-        <button class="icon-btn hud-btn" data-act="test" title="Panel uji guru" aria-label="Panel uji guru" data-testid="btn-test">🧪</button>
+        ${mode === 'test' ? '<button class="icon-btn hud-btn" data-act="test" title="Panel uji guru" aria-label="Panel uji guru" data-testid="btn-test">🧪</button>' : ''}
         <button class="icon-btn hud-btn" data-act="exit" title="Keluar" aria-label="Keluar" data-testid="btn-exit">✕</button>
       </div>
     </div>
@@ -385,7 +396,7 @@ async function startPlay(root, t, group, charId) {
         if (!ok) return;
         await saveResult();
       }
-      navigate(`/guru/edit/${t.id}/identitas`);
+      navigate(exitPath);
     }
   };
   root.querySelector('[data-act="help"]').onclick = (e) => {
@@ -417,14 +428,26 @@ async function startPlay(root, t, group, charId) {
     api?.destroy();
     return true;
   });
+  const showLoadError = (detail) => {
+    const box = $('[data-loading]');
+    if (!box) return;
+    box.innerHTML = `${lumiSVG({ size: 80, mood: 'sad' })}
+      <p>Dunia petualangan belum bisa dimuat di perangkat ini.</p>
+      <p class="hint">${esc(detail)}</p>
+      <p class="hint">Coba muat ulang, atau buka dengan Chrome/Edge versi terbaru.</p>
+      <a class="btn btn-primary" href="#${exitPath}">← Kembali</a>`;
+  };
   try {
     const { startGame } = await import('../game/index.js');
     if (destroyed) return;
     api = startGame($('#game-host'), { characterId: char.id, quest, hooks });
     window.__jc = api; // dipakai uji otomatis
+    setTimeout(() => {
+      if (!destroyed && $('[data-loading]')) showLoadError('Waktu memuat lebih dari 20 detik (WebGL/Canvas mungkin diblokir).');
+    }, 20000);
   } catch (err) {
     console.error(err);
-    toast('Game gagal dimuat. Muat ulang halaman.', 'error');
+    showLoadError(err?.message || String(err));
   }
 }
 

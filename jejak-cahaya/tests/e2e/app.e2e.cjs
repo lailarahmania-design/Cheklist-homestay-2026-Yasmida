@@ -646,6 +646,22 @@ function assert(cond, msg) {
       assert(fs.readFileSync(f, 'utf8').includes('Skor total;154'), 'csv dashboard');
     });
 
+    await step('Mode Siswa: dari beranda memilih ujian siap lalu bermain', async () => {
+      await page.goto(BASE + '#/');
+      await page.click(tid('go-student'));
+      await page.waitForSelector(tid('student-exams'));
+      const n = await page.$$(tid('student-start'));
+      assert(n.length >= 1, 'ada ujian siap');
+      await page.click(`${tid('student-start')} >> nth=0`);
+      await page.click(tid('start-adventure'));
+      await page.waitForSelector(`${tid('lumi-dialog')}:not([hidden])`, { timeout: 15000 });
+      assert(!(await page.$(tid('btn-test'))), 'panel uji guru tidak tampil untuk siswa');
+      for (let i = 0; i < 3; i++) await page.click(tid('dialog-btn'));
+      await page.click(tid('btn-exit'));
+      await page.click('[data-yes]');
+      await page.waitForSelector(tid('student-exams'));
+    });
+
     await step('Tidak ada error JavaScript selama pengujian', async () => {
       assert(errors.length === 0, errors.join(' | '));
     });

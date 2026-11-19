@@ -28,8 +28,8 @@ export function renderHome(root) {
       </article>
       <article class="panel home-card">
         <span class="ribbon" style="background:linear-gradient(180deg,#5cbde3,#3aa6d0);box-shadow:0 3px 0 #24799b">🎒 Mode Siswa</span>
-        <p>Bergabung dengan kode sesi dari guru, pilih karakter, lalu jelajahi dunia bersama kelompokmu.</p>
-        <p class="badge badge-water">Bergabung dengan kode sesi tersedia di Tahap 4</p>
+        <p>Pilih ujian yang disiapkan guru, pilih kelompok dan karakter, lalu jelajahi dunia bersama kelompokmu.</p>
+        <a class="btn btn-water btn-lg" href="#/main" data-testid="go-student">Masuk sebagai Siswa</a>
       </article>
     </section>
 
