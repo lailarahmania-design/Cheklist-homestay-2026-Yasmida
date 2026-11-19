@@ -90,7 +90,29 @@ export function downloadJSON(filename, data) {
   downloadText(filename, JSON.stringify(data, null, 2), 'application/json');
 }
 
-export function downloadText(filename, text, type = 'text/plain;charset=utf-8') {
+/** Di dalam viewer Artifact claude.ai, unduhan & cetak harus lewat platform. */
+export const inArtifactViewer = () => typeof window !== 'undefined' && typeof window.claude?.use === 'function';
+export const canPrint = () => !inArtifactViewer();
+
+export async function downloadText(filename, text, type = 'text/plain;charset=utf-8') {
+  if (inArtifactViewer()) {
+    const downloads = await window.claude.use('downloads');
+    if (!downloads) {
+      toast('Unduhan tidak tersedia di tampilan ini.', 'error');
+      return;
+    }
+    try {
+      await downloads.save({ filename, data: text });
+      toast('File disimpan.', 'ok');
+    } catch (e) {
+      if (e?.code !== 'declined') toast(`File gagal disimpan (${e?.code || 'tidak diketahui'}).`, 'error');
+    }
+    return;
+  }
+  downloadBlob(filename, text, type);
+}
+
+function downloadBlob(filename, text, type) {
   const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

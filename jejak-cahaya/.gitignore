@@ -3,3 +3,5 @@ dist/
 test-output/
 .env
 .env.local
+dist-single/
+jejak-cahaya.html

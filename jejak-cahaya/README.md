@@ -62,6 +62,7 @@ npm run dev        # server pengembangan → http://localhost:5173
 npm test           # unit test (Vitest)
 npm run build      # hasil build di folder dist/
 npm run test:e2e   # uji E2E di Chromium (jalankan setelah build; butuh Playwright)
+npm run build:single  # satu file jejak-cahaya.html (bisa dibuka langsung tanpa server)
 ```
 
 Push ke branch `main` akan menjalankan tes, build, dan deploy ke **GitHub Pages**

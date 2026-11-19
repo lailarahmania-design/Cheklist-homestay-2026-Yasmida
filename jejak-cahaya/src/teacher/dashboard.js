@@ -8,7 +8,7 @@ import { exportConfig, importConfig, duplicateTemplate } from '../config/config-
 import { bankTemplate } from '../question-bank/bank-ops.js';
 import { validateBank } from '../question-bank/schema.js';
 import { teacherShell } from './shell.js';
-import { esc, toast, confirmDialog, downloadJSON, downloadText, pickTextFile, slug, formatDate, openModal } from '../ui/ui.js';
+import { esc, toast, confirmDialog, downloadJSON, downloadText, pickTextFile, slug, formatDate, openModal, canPrint } from '../ui/ui.js';
 import { csvFromData, resultFileName } from '../results/result-report.js';
 import { resultSheetHTML } from '../results/result-sheet.js';
 
@@ -181,8 +181,8 @@ async function resultAction(act, id, results) {
       title: `Hasil ${r.summary.group}`,
       wide: true,
       render(body) {
-        body.innerHTML = `${resultSheetHTML(r)}<div class="actions no-print"><button class="btn btn-gold" data-print>🖨️ Cetak / Simpan PDF</button></div>`;
-        body.querySelector('[data-print]').onclick = () => window.print();
+        body.innerHTML = `${resultSheetHTML(r)}${canPrint() ? '<div class="actions no-print"><button class="btn btn-gold" data-print>🖨️ Cetak / Simpan PDF</button></div>' : ''}`;
+        body.querySelector('[data-print]')?.addEventListener('click', () => window.print());
       },
     });
   } else if (act === 'csv') {

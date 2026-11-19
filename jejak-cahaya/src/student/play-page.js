@@ -13,7 +13,7 @@ import { resultSheetHTML } from '../results/result-sheet.js';
 import { openVersePuzzle } from './challenges/verse-puzzle.js';
 import { openBattleQuiz } from './challenges/battle-quiz.js';
 import { openReflection } from './challenges/reflection.js';
-import { confirmDialog, downloadJSON, downloadText } from '../ui/ui.js';
+import { confirmDialog, downloadJSON, downloadText, canPrint } from '../ui/ui.js';
 import { touchInput } from '../game/systems/input.js';
 
 export async function renderPlay(root, { id }) {
@@ -331,14 +331,14 @@ async function startPlay(root, t, group, charId) {
         <div class="result-actions no-print">
           <button class="btn btn-primary" data-dl="csv" data-testid="dl-csv">⬇️ Unduh CSV (Excel)</button>
           <button class="btn" data-dl="json" data-testid="dl-json">⬇️ Unduh JSON</button>
-          <button class="btn btn-gold" data-dl="print">🖨️ Cetak / Simpan PDF</button>
+          ${canPrint() ? '<button class="btn btn-gold" data-dl="print">🖨️ Cetak / Simpan PDF</button>' : ''}
           <button class="btn btn-ghost" data-dl="close">🗺️ Kembali ke peta</button>
         </div>
         <p class="hint no-print">Hasil juga tersimpan di perangkat ini dan dapat diunduh ulang dari Dashboard Guru → Hasil Tersimpan.</p>
       </div>`;
     layer.querySelector('[data-dl="csv"]').onclick = () => downloadText(resultFileName(run, 'csv'), toCSV(run, t), 'text/csv;charset=utf-8');
     layer.querySelector('[data-dl="json"]').onclick = () => downloadJSON(resultFileName(run, 'json'), toJSON(run, t));
-    layer.querySelector('[data-dl="print"]').onclick = () => window.print();
+    layer.querySelector('[data-dl="print"]')?.addEventListener('click', () => window.print());
     layer.querySelector('[data-dl="close"]').onclick = () => (layer.hidden = true);
   };
 
